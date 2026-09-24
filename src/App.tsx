@@ -1,160 +1,78 @@
+import { useState } from "react";
 import "./styles.css";
+import { AdminView } from "./components/AdminView";
+import { InspectorView } from "./components/InspectorView";
+import { loadRole, useStore, type Role } from "./store";
 
-const project = {
-  "id": "hxwl-09",
-  "port": 5109,
-  "title": "半导体洁净室巡检",
-  "subtitle": "洁净等级阈值、粒子计数与异常处理看板",
-  "stack": "React + Vite + TypeScript + CSS",
-  "theme": [
-    "#0f766e",
-    "#2563eb",
-    "#e11d48"
-  ],
-  "domain": "洁净室巡检",
-  "users": [
-    "巡检员",
-    "厂务工程师",
-    "班组长"
-  ],
-  "metrics": [
-    "粒子异常",
-    "压差异常",
-    "温湿度偏移",
-    "待处理"
-  ],
-  "filters": [
-    "ISO 5",
-    "ISO 6",
-    "ISO 7",
-    "黄光区"
-  ],
-  "fields": [
-    "房间编号",
-    "洁净等级",
-    "粒子计数",
-    "温湿度",
-    "压差",
-    "设备状态",
-    "处理备注"
-  ],
-  "records": [
-    [
-      "CR-1201",
-      "ISO 5",
-      "异常",
-      "0.5um粒子超限，已通知厂务"
-    ],
-    [
-      "CR-2107",
-      "ISO 6",
-      "稳定",
-      "压差15Pa，温湿度正常"
-    ],
-    [
-      "Y-0302",
-      "黄光区",
-      "关注",
-      "湿度接近上限"
-    ]
-  ]
-};
+const ROLE_KEY = "cleanroom-limit-console:role";
 
-const statusColors = ["status-ok", "status-watch", "status-danger"];
+export default function App() {
+  const store = useStore();
+  const [role, setRole] = useState<Role>(() => loadRole());
+  const [confirmReset, setConfirmReset] = useState(false);
 
-function MetricCard({ label, value, index }: { label: string; value: string; index: number }) {
-  return (
-    <article className="metric-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <i className={statusColors[index % statusColors.length]} />
-    </article>
-  );
-}
-
-function App() {
-  const values = project.metrics.map((metric: string, index: number) => {
-    const base = [84, 12, 31, 7][index % 4];
-    return String(base + index * 3);
-  });
+  const switchRole = (next: Role) => {
+    setRole(next);
+    localStorage.setItem(ROLE_KEY, next);
+  };
 
   return (
     <main className="app-shell">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">{project.id} · port {project.port}</p>
-          <h1>{project.title}</h1>
-          <p className="subtitle">{project.subtitle}</p>
+      <header className="app-header">
+        <div className="header-title">
+          <p className="eyebrow">hxwl-09 · 半导体洁净室</p>
+          <h1>限值版本与巡检判定台</h1>
+          <p className="subtitle">
+            ISO 等级限值按版本发布；每条巡检记录冻结判定时的限值与结论，超限自动进异常区，补录另建修正记录。
+          </p>
         </div>
-        <div className="stack-card">
-          <span>技术栈</span>
-          <strong>{project.stack}</strong>
+        <div className="header-side">
+          <div className="role-switch" role="tablist" aria-label="角色切换">
+            <button
+              className={role === "admin" ? "active" : ""}
+              onClick={() => switchRole("admin")}
+            >
+              管理员
+            </button>
+            <button
+              className={role === "inspector" ? "active" : ""}
+              onClick={() => switchRole("inspector")}
+            >
+              巡检员
+            </button>
+          </div>
+          <p className="persist-hint">数据保存在本机浏览器，重开页面可继续对账</p>
         </div>
-      </section>
+      </header>
 
-      <section className="metrics-grid">
-        {project.metrics.map((metric: string, index: number) => (
-          <MetricCard key={metric} label={metric} value={values[index]} index={index} />
-        ))}
-      </section>
+      {role === "admin" ? <AdminView store={store} /> : <InspectorView store={store} />}
 
-      <section className="workspace">
-        <aside className="panel narrow">
-          <h2>角色</h2>
-          <div className="chips">
-            {project.users.map((user: string) => (
-              <span key={user}>{user}</span>
-            ))}
-          </div>
-          <h2>筛选</h2>
-          <div className="chips muted">
-            {project.filters.map((filter: string) => (
-              <button key={filter}>{filter}</button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p>{project.domain}</p>
-              <h2>记录字段</h2>
-            </div>
-            <button className="primary-action">新增记录</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="records panel">
-        <div className="section-heading">
-          <div>
-            <p>示例数据</p>
-            <h2>近期记录</h2>
-          </div>
-          <button>导出摘要</button>
+      <footer className="app-footer">
+        <div className="footer-stats">
+          <span>已发布版本 {store.versions.filter((v) => v.status === "published").length}</span>
+          <span>草稿 {store.versions.filter((v) => v.status === "draft").length}</span>
+          <span>巡检记录 {store.records.filter((r) => r.kind === "routine").length}</span>
+          <span>修正补录 {store.records.filter((r) => r.kind === "correction").length}</span>
+          <span>
+            未处理异常 {store.records.filter((r) => r.status === "abnormal" && !r.handled).length}
+          </span>
         </div>
-        <div className="record-list">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")} className="record-card">
-              <div className="record-index">{String(index + 1).padStart(2, "0")}</div>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+        {confirmReset ? (
+          <div className="reset-confirm">
+            将清空全部版本与记录并恢复演示数据，确定？
+            <button className="btn-danger btn-sm" onClick={() => { store.resetAll(); setConfirmReset(false); }}>
+              确认重置
+            </button>
+            <button className="btn-secondary btn-sm" onClick={() => setConfirmReset(false)}>
+              取消
+            </button>
+          </div>
+        ) : (
+          <button className="btn-link" onClick={() => setConfirmReset(true)}>
+            恢复演示数据
+          </button>
+        )}
+      </footer>
     </main>
   );
 }
-
-export default App;
